@@ -1,7 +1,6 @@
 import os
 import logging
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+from telegram.ext import Updater, MessageHandler, Filters
 
 logging.basicConfig(level=logging.INFO)
 
@@ -9,7 +8,7 @@ TOKEN = os.environ["BOT_TOKEN"]
 
 seen_messages = {}
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def handle_message(update, context):
     msg = update.message or update.channel_post
     if not msg or not msg.text:
         return
@@ -18,11 +17,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if chat_id not in seen_messages:
         seen_messages[chat_id] = set()
     if text in seen_messages[chat_id]:
-        await msg.delete()
-        logging.info(f"Deleted duplicate: {text[:30]}")
+        msg.delete()
     else:
         seen_messages[chat_id].add(text)
 
-app = ApplicationBuilder().token(TOKEN).build()
-app.add_handler(MessageHandler(filters.TEXT, handle_message))
-app.run_polling()
+updater = Updater(TOKEN)
+dp = updater.dispatcher
+dp.add_handler(MessageHandler(Filters.text, handle_message))
+updater.start_polling()
+updater.idle()
