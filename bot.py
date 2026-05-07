@@ -76,9 +76,7 @@ def mark_seen(chat_id, content_hash):
     )
 
 def get_message_hash(msg):
-    if msg.text:
-        return f"text_{msg.text.strip().lower()}"
-    elif msg.document:
+    if msg.document:
         return f"doc_{msg.document.file_unique_id}"
     elif msg.video:
         return f"vid_{msg.video.file_unique_id}"
@@ -86,6 +84,8 @@ def get_message_hash(msg):
         return f"photo_{msg.photo[-1].file_unique_id}"
     elif msg.audio:
         return f"audio_{msg.audio.file_unique_id}"
+    elif msg.text:
+        return f"text_{msg.text.strip().lower()}"
     return None
 
 def get_deleted_count(chat_id):
@@ -208,7 +208,9 @@ def handle_forward(update, context):
     msg = update.message or update.channel_post
     if not msg:
         return
-    if msg.forward_from or msg.forward_from_chat or msg.forward_date:
+    is_forwarded = (msg.forward_from or msg.forward_from_chat or msg.forward_date)
+    has_media = (msg.document or msg.video or msg.audio or msg.photo)
+    if is_forwarded or has_media:
         name = ""
         if msg.caption:
             name = msg.caption[:50]
@@ -232,12 +234,11 @@ def handle_forward(update, context):
             [InlineKeyboardButton("❌ Skip", callback_data="skip")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        sent = msg.reply_text(
+        msg.reply_text(
             f"📋 *Add to Watchlist?*\n\n`{name}`\n\nChoose category:",
             parse_mode='Markdown',
             reply_markup=reply_markup
         )
-        delete_message_after_delay(context, msg.chat_id, sent.message_id, delay=30)
 
 def handle_message(update, context):
     msg = update.message or update.channel_post
@@ -246,7 +247,9 @@ def handle_message(update, context):
     chat_id = msg.chat_id
     if not is_active(chat_id):
         return
-    if msg.forward_from or msg.forward_from_chat or msg.forward_date:
+    is_forwarded = (msg.forward_from or msg.forward_from_chat or msg.forward_date)
+    has_media = (msg.document or msg.video or msg.audio or msg.photo)
+    if is_forwarded or has_media:
         handle_forward(update, context)
         content_hash = get_message_hash(msg)
         if content_hash:
@@ -266,17 +269,6 @@ def handle_message(update, context):
         if should_auto_delete(text):
             delete_after_delay(msg, delay=30)
             return
-        content_hash = get_message_hash(msg)
-        if content_hash:
-            if is_seen(chat_id, content_hash):
-                try:
-                    msg.delete()
-                    increment_deleted(chat_id)
-                except:
-                    pass
-            else:
-                mark_seen(chat_id, content_hash)
-    else:
         content_hash = get_message_hash(msg)
         if content_hash:
             if is_seen(chat_id, content_hash):
