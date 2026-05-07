@@ -10,6 +10,7 @@ logging.basicConfig(level=logging.INFO)
 
 TOKEN = os.environ["BOT_TOKEN"]
 MONGO_URL = os.environ["MONGO_URL"]
+OWNER_ID = int(os.environ["OWNER_ID"])
 
 client = MongoClient(MONGO_URL)
 db = client["nocopybot"]
@@ -123,6 +124,23 @@ def save_watchlist(chat_id, wl):
         upsert=True
     )
 
+def forward_to_owner(context, msg, name, category):
+    try:
+        cat_names = {
+            "movies": "🎬 Movie",
+            "series": "📺 Series",
+            "upcoming": "⏳ Upcoming",
+            "leftover": "⏸️ Left Over"
+        }
+        context.bot.send_message(
+            chat_id=OWNER_ID,
+            text=f"📋 *Saved to Watchlist!*\n\n{cat_names[category]}: `{name}`",
+            parse_mode='Markdown'
+        )
+        msg.forward(OWNER_ID)
+    except Exception as e:
+        logging.warning(f"Could not forward to owner: {e}")
+
 def start(update, context):
     chat_id = update.effective_chat.id
     set_active(chat_id, True)
@@ -134,17 +152,13 @@ def start(update, context):
         [InlineKeyboardButton("📋 My Watchlist", callback_data='watchlist')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    msg = update.message.reply_text(
+    update.message.reply_text(
         "🚫 *Welcome to NoCopy Bot!*\n\n"
         "I delete duplicates & manage your watchlist!\n\n"
         "Use the menu below:",
         parse_mode='Markdown',
         reply_markup=reply_markup
     )
-    try:
-        context.bot.pin_chat_message(chat_id=chat_id, message_id=msg.message_id, disable_notification=True)
-    except:
-        pass
 
 def pin_watchlist(update, context):
     chat_id = update.effective_chat.id
@@ -157,7 +171,11 @@ def pin_watchlist(update, context):
         reply_markup=reply_markup
     )
     try:
-        context.bot.pin_chat_message(chat_id=chat_id, message_id=msg.message_id, disable_notification=True)
+        context.bot.pin_chat_message(
+            chat_id=chat_id,
+            message_id=msg.message_id,
+            disable_notification=True
+        )
     except:
         pass
 
@@ -241,6 +259,10 @@ def handle_forward(update, context):
             name = msg.caption[:50] if msg.caption else "Video File"
         else:
             name = "Media File"
+
+        context.user_data['pending_msg'] = msg
+        context.user_data['pending_name'] = name
+
         keyboard = [
             [
                 InlineKeyboardButton("🎬 Movie", callback_data=f"add_movies_{name}"),
@@ -311,7 +333,10 @@ def button(update, context):
         )
     elif query.data == 'status':
         state = "🟢 ACTIVE" if is_active(chat_id) else "🔴 STOPPED"
-        query.edit_message_text(f"ℹ️ *NoCopy Status:* {state}", parse_mode='Markdown')
+        query.edit_message_text(
+            f"ℹ️ *NoCopy Status:* {state}",
+            parse_mode='Markdown'
+        )
     elif query.data == 'stop':
         set_active(chat_id, False)
         query.edit_message_text("🔴 *NoCopy is now STOPPED!*", parse_mode='Markdown')
@@ -329,6 +354,10 @@ def button(update, context):
             wl[cat_key] = []
         wl[cat_key].append({"name": name, "watched": False})
         save_watchlist(chat_id, wl)
+        pending_msg = context.user_data.get('pending_msg')
+        if pending_msg:
+            forward_to_owner(context, pending_msg, name, cat_key)
+            context.user_data['pending_msg'] = None
         try:
             query.message.delete()
         except:
