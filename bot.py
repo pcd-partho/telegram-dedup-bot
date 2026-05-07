@@ -134,13 +134,32 @@ def start(update, context):
         [InlineKeyboardButton("📋 My Watchlist", callback_data='watchlist')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    update.message.reply_text(
+    msg = update.message.reply_text(
         "🚫 *Welcome to NoCopy Bot!*\n\n"
         "I delete duplicates & manage your watchlist!\n\n"
         "Use the menu below:",
         parse_mode='Markdown',
         reply_markup=reply_markup
     )
+    try:
+        context.bot.pin_chat_message(chat_id=chat_id, message_id=msg.message_id, disable_notification=True)
+    except:
+        pass
+
+def pin_watchlist(update, context):
+    chat_id = update.effective_chat.id
+    keyboard = [[InlineKeyboardButton("📋 My Watchlist", callback_data='watchlist')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    msg = context.bot.send_message(
+        chat_id=chat_id,
+        text="📋 *Tap below to open your Watchlist!*",
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
+    try:
+        context.bot.pin_chat_message(chat_id=chat_id, message_id=msg.message_id, disable_notification=True)
+    except:
+        pass
 
 def show_watchlist(chat_id, context, query=None):
     wl = get_watchlist(chat_id)
@@ -310,16 +329,10 @@ def button(update, context):
             wl[cat_key] = []
         wl[cat_key].append({"name": name, "watched": False})
         save_watchlist(chat_id, wl)
-        cat_names = {
-            "movies": "🎬 Movies",
-            "series": "📺 Series",
-            "upcoming": "⏳ Upcoming",
-            "leftover": "⏸️ Left Over"
-        }
-        query.edit_message_text(
-            f"✅ *Added to {cat_names[cat_key]}!*\n\n`{name}`",
-            parse_mode='Markdown'
-        )
+        try:
+            query.message.delete()
+        except:
+            pass
     elif query.data.startswith('watched_'):
         parts = query.data.split('_', 2)
         cat_key = parts[1]
@@ -336,7 +349,10 @@ def button(update, context):
         save_watchlist(chat_id, wl)
         show_watchlist(chat_id, context, query=query)
     elif query.data == 'skip':
-        query.edit_message_text("❌ *Skipped!*", parse_mode='Markdown')
+        try:
+            query.message.delete()
+        except:
+            pass
 
 updater = Updater(TOKEN)
 dp = updater.dispatcher
@@ -345,6 +361,7 @@ dp.add_handler(CommandHandler("stop", stop_cmd))
 dp.add_handler(CommandHandler("status", status_cmd))
 dp.add_handler(CommandHandler("stats", stats_cmd))
 dp.add_handler(CommandHandler("watchlist", watchlist_cmd))
+dp.add_handler(CommandHandler("pin", pin_watchlist))
 dp.add_handler(CallbackQueryHandler(button))
 dp.add_handler(MessageHandler(Filters.all, handle_message))
 updater.start_polling()
